@@ -26,6 +26,13 @@ Using
 -----
 The easiest way to use kanarie is through the scripts, particularly the
 `kanarie_predict.py` script.  This uses data from the OpScreen pages to provide
-a quick ok/not ok determination for a station.
+a quick ok/possible overheating determination for a station.  The conditions
+that lead to a "possible overheating" determination are:
+ * The shelter temperature is over 82 F
+ * The last three measured temperatures are more than 3*sigma above the
+   predictions for either of the shelter's temperature sensors.
+
+Here sigma corresponds to the model's uncertainty that was determined through
+validation.
 
 
