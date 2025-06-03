@@ -112,6 +112,14 @@ def main(args):
             print(f"  {ts:.1f} -> {temp} vs {p} predicted")
     else:
         print(f"Shelter temperatures appear normal (nhigh={nhigh})")
+        if args.verbose:
+            print("Details:")
+            for t,v,p in zip(tstamps, values, predicted):
+                print(f"  Timestamp: {t:.0f} s")
+                print(f"    Actual: {' C, '.join(['%.1f' % v2 for v2 in v])} C")
+                print(f"    Predicted: {' C, '.join(['%.1f' % p2 for p2 in p])} C")
+                print(f"    Difference: {' C, '.join(['%.1f' % (v2-p2) for v2,p2 in zip(v,p)])} C")
+                print(f"                {' sigma, '.join(['%.1f' % ((v2-p2)/mdl.validation_std) for v2,p2 in zip(v,p)])} sigma")
 
 
 if __name__ == '__main__':
@@ -121,6 +129,8 @@ if __name__ == '__main__':
         )
     parser.add_argument('station', type=str, default='lwa1',
                         help='station to check')
+    parser.add_argument('-v', '--verbose', action='store_true',
+                        help='be verbose about the predictions')
     args = parser.parse_args()
     args.station = args.station.lower().replace('-', '')
     main(args)
