@@ -1,3 +1,9 @@
+# Training and validation data sets
+training/
+
+# Auto generated files
+kanarie/git_version.py
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
