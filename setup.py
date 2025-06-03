@@ -52,6 +52,6 @@ setup(name                 = "kanarie",
       scripts              = glob.glob('scripts/*.py'),
       include_package_data = True,
       python_requires      = ">=3.8",
-      install_requires     = ['numpy', 'scikit-learn']
+      install_requires     = ['numpy', 'scikit-learn'],
       zip_safe             = False
 )
