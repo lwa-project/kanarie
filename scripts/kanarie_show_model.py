@@ -16,7 +16,8 @@ def main(args):
         print(f"  Number of trees: {desc['ntree']}")
         print(f"  Number of features: {desc['nfeature']}")
         print(f"  Number of values predicted per feature set: {desc['noutput']}")
-        print(f"  Estimated training score: {desc['training_score']:.4%}")
+        if 'training_score' in desc:
+            print(f"  Estimated training score: {desc['training_score']:.4%}")
         if 'validation_r_sq' in desc:
             print(f"  Validation R^2: {desc['validation_r_sq']:.4f}")
         if 'validation_std' in desc:
