@@ -16,8 +16,10 @@ __all__ = ['observations_to_features', 'ShelterTemperatureModel']
 def observations_to_features(shelter_timestamps: np.ndarray,
                              shelter_temps: np.ndarray,
                              weather_timestamps: np.ndarray,
-                             weather_temps: np.ndarray,
+                             weather_temp: np.ndarray,
+                             weather_pressure: np.ndarray,
                              weather_humidity: np.ndarray,
+                             weather_enthalpy: np.ndarray,
                              weather_windspeed: np.ndarray,
                              weather_winddir: np.ndarray,
                              window_min: float=180,
@@ -52,15 +54,25 @@ def observations_to_features(shelter_timestamps: np.ndarray,
             for i in range(shelter_temps.shape[1]):
                 feature_names.append(f"temp{i}_{n}")
                 
-    # Simple temperature differencing
-    windows2 = list(filter(lambda x: x % 60 == 0, windows))
-    diff_obs = window_params(shelter_timestamps, shelter_temps, windows_min=windows2)
-    if len(diff_obs) != len(windows2)*4:
+    # Sensor differencing
+    diff_obs = {}
+    if len(shelter_temps.shape) > 1:
+        for n in direct_obs.keys():
+            for i in range(shelter_temps.shape[1]):
+                for j in range(i+1, shelter_temps.shape[1]):
+                    diff_obs[f"temp{i}_{j}_diff_{n}"] = direct_obs[n][i] - direct_obs[n][j]
+        for n in diff_obs.keys():
+            feature_names.append(n)
+            
+    # Simple temperature analysis over time windows
+    windows2 = list(filter(lambda x: x == 30 or x % 60 == 0, windows))
+    span_obs = window_params(shelter_timestamps, shelter_temps, windows_min=windows2)
+    if len(span_obs) != len(windows2)*4:
         raise RuntimeError("Provided shelter data do not span a long enough time range")
     if len(shelter_temps.shape) == 1:
-        feature_names.extend(list(diff_obs.keys()))
+        feature_names.extend(list(span_obs.keys()))
     else:
-        for n in diff_obs.keys():
+        for n in span_obs.keys():
             for i in range(shelter_temps.shape[1]):
                 feature_names.append(f"temp{i}_{n}")
                 
@@ -79,28 +91,31 @@ def observations_to_features(shelter_timestamps: np.ndarray,
     winds_ns = weather_windspeed*np.cos(weather_winddir * np.pi/180)
     winds_ew = weather_windspeed*np.sin(weather_winddir * np.pi/180)
     
-    # Average weather over the last 2 hr
+    # Average weather over the last 1 hr
     wx_obs = get_closest_window(shelter_timestamps[-1],
-                                weather_timestamps, weather_temps, weather_humidity,
-                                winds_ns, winds_ew, window_min=120)
+                                weather_timestamps, weather_temp, weather_pressure,
+                                weather_humidity, weather_enthalpy, winds_ns, winds_ew,
+                                window_min=60)
     if len(wx_obs) == 0:
         raise RuntimeError("Provided weather data no not overlap with shelter data")
     if len(wx_obs[0]) == 0:
         raise RuntimeError("Provided weather data no not overlap with shelter data")    
     wx_obs = [entry.mean() for entry in wx_obs]
-    feature_names.extend(['wx_temp', 'wx_humid', 'wx_wind_ns', 'wx_wind_ew'])
+    feature_names.extend(['wx_temp', 'wx_press', 'wx_humid', 'wx_enth', 'wx_wind_ns', 'wx_wind_ew'])
     
     # Put it all together
     features = []
     features.extend(basic_dt.values())
     if len(shelter_temps.shape) == 1:
         features.extend(direct_obs.values())
-        features.extend(diff_obs.values())
+        features.extend(span_obs.values())
         features.extend(cycle_obs.values())
     else:
         for v in direct_obs.values():
             features.extend(v)
         for v in diff_obs.values():
+            features.append(v)
+        for v in span_obs.values():
             features.extend(v)
         for v in cycle_obs.values():
             features.extend(v)
@@ -137,7 +152,6 @@ class ShelterTemperatureModel:
         self.feature_names = None
         if model_params is None:
             self.model = RandomForestRegressor(n_estimators=300,
-                                               oob_score=True,
                                                random_state=625)
         else:
             with open(model_params, 'rb') as fh:
@@ -180,6 +194,39 @@ class ShelterTemperatureModel:
         except AttributeError:
             pass
             
+    def _apply_feature_selection(self, features: np.ndarray) -> np.ndarray:
+        """
+        Apply the stored feature selection to new features.
+        """
+        
+        if self.features_mask is not None:
+            if len(features.shape) == 1:
+                return features[self.features_mask]
+            else:
+                return features[:, self.features_mask]
+                
+        return features
+        
+    def fit_with_feature_selection(self, features: np.ndarray, values: np.ndarray, feature_names: List[str], threshold=0.0005):
+        """
+        Given a 2D array of features (samples x feature) and a 1D array of
+        expected values (samples), update the model.
+        """
+        
+        # Initial fit with all the data
+        self.fit(features, values, feature_names=feature_names)
+        
+        # Select
+        importance = self.model.feature_importances_
+        self.features_mask = importance >= threshold
+        
+        # Prune
+        selected_features = self._apply_feature_selection(features)
+        selected_feature_names = [n for i,n in enumerate(feature_names) if self.features_mask[i]]
+        
+        # Re-fit
+        self.fit(selected_features, values, feature_names=selected_feature_names)
+        
     def predict(self, features: Union[List,np.ndarray]) -> Union[float,np.ndarray]:
         """
         Given a list of features, make a prediction about the current shelter
@@ -190,8 +237,9 @@ class ShelterTemperatureModel:
             features = np.array(features)
         if len(features.shape) == 1:
             features = features.reshape(1,-1)
-            
-        pred = self.model.predict(features)
+        
+        selected_features = self._apply_feature_selection(features)    
+        pred = self.model.predict(selected_features)
         if features.shape[0] == 1:
             pred = pred[0]
             
@@ -215,7 +263,8 @@ class ShelterTemperatureModel:
         if len(features.shape) == 1:
             features = features.reshape(1,-1)
             
-        preds = np.array([tree.predict(features) for tree in self.model.estimators_])
+        selected_features = self._apply_feature_selection(features)
+        preds = np.array([tree.predict(selected_features) for tree in self.model.estimators_])
         pred = preds.mean(axis=0)
         lwr = np.percentile(preds, (1 - confidence)/2 * 100, axis=0)
         upr = np.percentile(preds, (1 + confidence)/2 * 100, axis=0)
@@ -231,8 +280,9 @@ class ShelterTemperatureModel:
         Given a validation set of features and values, return the coefficient
         of determination for the model.
         """
-        
-        cod = self.model.score(features, values)
+       
+        selected_features = self._apply_feature_selection(features) 
+        cod = self.model.score(selected_features, values)
         self.validation_r_sq = cod
         self.validation_std = np.sqrt((1 - cod)*np.var(values))
         
@@ -278,6 +328,7 @@ class ShelterTemperatureModel:
                 
         with open(model_params, 'wb') as fh:
             r = {'model': self.model, 'feature_names': self.feature_names}
+            r['features_mask'] = getattr(self, 'features_mask', None)
             if getattr(self, 'validation_r_sq', None) is not None:
                 r['validation_r_sq'] = self.validation_r_sq
             if getattr(self, 'validation_std', None) is not None:
