@@ -76,6 +76,18 @@ def observations_to_features(shelter_timestamps: np.ndarray,
             for i in range(shelter_temps.shape[1]):
                 feature_names.append(f"temp{i}_{n}")
                 
+    # Simple temperature analysis over lags
+    lags = list(filter(lambda x: x <= 60, windows))
+    lag_obs = lagged_params(shelter_timestamps, shelter_temps, lags_min=lags)
+    if len(lag_obs) != len(lags)*4:
+        raise RuntimeError("Provided shelter data do not span a long enough time range")
+    if len(shelter_temps.shape) == 1:
+        feature_names.extend(list(lag_obs.keys()))
+    else:
+        for n in lag_obs.keys():
+            for i in range(shelter_temps.shape[1]):
+                feature_names.append(f"temp{i}_{n}")
+                
     # Spectral analysis of the shelter temperature over the last 2 hr
     cycle_obs = cycle_params(shelter_timestamps, shelter_temps, window_min=120)
     if len(cycle_obs) == 0:
@@ -109,6 +121,7 @@ def observations_to_features(shelter_timestamps: np.ndarray,
     if len(shelter_temps.shape) == 1:
         features.extend(direct_obs.values())
         features.extend(span_obs.values())
+        features.extend(lag_obs.values())
         features.extend(cycle_obs.values())
     else:
         for v in direct_obs.values():
@@ -116,6 +129,8 @@ def observations_to_features(shelter_timestamps: np.ndarray,
         for v in diff_obs.values():
             features.append(v)
         for v in span_obs.values():
+            features.extend(v)
+        for v in lag_obs.values():
             features.extend(v)
         for v in cycle_obs.values():
             features.extend(v)

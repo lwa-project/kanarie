@@ -5,7 +5,8 @@ from .utils import get_closest_point
 
 from typing import Any, Dict, List
 
-__all__ = ['datetime_params', 'lookback_params', 'window_params', 'cycle_params']
+__all__ = ['datetime_params', 'lookback_params', 'window_params', 'lagged_params',
+           'cycle_params']
 
 
 def datetime_params(timestamps: np.ndarray) -> Dict[str,float]:
@@ -72,8 +73,8 @@ def window_params(timestamps: np.ndarray, data: np.ndarray,
     
     results = {}
     for w in windows_min:
-        good = np.where(ages < w)[0]
-        if len(good) > 3:
+        good = np.where((ages > 0) & (ages <= w))[0]
+        if len(good) >= 3:
             slopes = []
             for i in range(data.shape[1]):
                 slopes.append(np.polyfit(ages[good], data[good,i], 1)[0])
@@ -82,6 +83,51 @@ def window_params(timestamps: np.ndarray, data: np.ndarray,
             results[f"{w:.0f}min_std"]    = data[good,:].std(axis=0)
             results[f"{w:.0f}min_minmax"] = data[good,:].max(axis=0) - data[good].min(axis=0)
             results[f"{w:.0f}min_slope"]  = np.array(slopes)
+            
+    if reshape_needed:
+        for k0 in results:
+            results[k0] = results[k0].item()
+            
+    return results
+
+
+def lagged_params(timestamps: np.ndarray, data: np.ndarray,
+                  lags_min: List[float]=[15, 30, 60, 120, 180, 240]) -> Dict[str,Any]:
+    """
+    Given a set of unix timestamps and associated data values, compute
+    mean values over the specified lags.  Parameters include:
+     * mean
+     * standard deviation
+     * max - min
+     * slope of the line that best fits the data
+    
+    ..note::  If a lag contains fewer than two data points no analysis is
+              performed on that window.
+    """
+    
+    reshape_needed = False
+    if len(data.shape) == 1:
+        reshape_needed = True
+        data = data.reshape(*data.shape, 1)
+        
+    ages = (timestamps[-1] - timestamps) / 60.0 # ages in minutes
+    timestep = abs(np.median(np.diff(ages)))    # median time step in minutes
+    
+    results = {}
+    for l in lags_min:
+        stepsize = int(round(l/timestep))
+        stepstart = (data.shape[0] - 1) % stepsize
+        good = np.s_[stepstart:-1:stepsize]
+        subdata = data[good,:]
+        if subdata.shape[0] >= 2:
+            slopes = []
+            for i in range(subdata.shape[1]):
+                slopes.append(np.polyfit(ages[good], subdata[:,i], 1)[0])
+                
+            results[f"{l:.0f}min_lag_mean"] = subdata.mean(axis=0)
+            results[f"{l:.0f}min_lag_std"]      = subdata.std(axis=0)
+            results[f"{l:.0f}min_lag_minmax"]   = subdata.max(axis=0) - subdata.min(axis=0)
+            results[f"{l:.0f}min_lag_slope"]    = np.array(slopes)
             
     if reshape_needed:
         for k0 in results:
@@ -107,7 +153,7 @@ def cycle_params(timestamps: np.ndarray, data: np.ndarray, window_min: float=120
     ages = (timestamps[-1] - timestamps) / 60.0 # ages in minutes
     
     results = {}
-    good = np.where(ages < window_min)[0]
+    good = np.where((ages > 0) & (ages <= window_min))[0]
     if len(good) > 15:
         subdata = data[good,:] - data[good,:].mean(axis=0)
         pwr = np.fft.fft(subdata, axis=0)
