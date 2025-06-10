@@ -33,7 +33,7 @@ def main(args):
         
     # Load the shelter and weather data, then report on what we have
     shl_ts, shl_temp0, shl_temp1 = read_shelter(shelter_data)
-    wx_ts, wx_temp, wx_rh, wx_sp, wx_dr = read_wview(weather_data)
+    wx_ts, wx_temp, wx_press, wx_rh, wx_en, wx_sp, wx_dr = read_wview(weather_data)
     
     shl_start, shl_stop = datetime.utcfromtimestamp(shl_ts[0]), datetime.utcfromtimestamp(shl_ts[-1])
     wx_start, wx_stop = datetime.utcfromtimestamp(wx_ts[0]), datetime.utcfromtimestamp(wx_ts[-1])
@@ -64,7 +64,7 @@ def main(args):
         w = np.s_[i-180:i]
         try:
             f = observations_to_features(shl_ts[w], shl_temp[w],
-                                         wx_ts, wx_temp, wx_rh, wx_sp, wx_dr,
+                                         wx_ts, wx_temp, wx_press, wx_rh, wx_en, wx_sp, wx_dr,
                                          return_feature_names=first)
             if first:
                 f, feature_names = f
@@ -93,7 +93,10 @@ def main(args):
     t0 = time.time()
     print("Building the model...")
     mdl = ShelterTemperatureModel(None)
-    mdl.fit(features, values, feature_names=feature_names)
+    if args.auto_select:
+        mdl.fit_with_feature_selection(features, values, feature_names)
+    else:
+        mdl.fit(features, values, feature_names=feature_names)
     t1 = time.time()
     print(f"Finished building the model in {t1-t0:.1f} s")
     print('')
@@ -123,6 +126,8 @@ if __name__ == '__main__':
                         help='do not show feature extraction errors')
     parser.add_argument('--temp-select', type=str, default='0',
                         help='build the model using the specified temperature sensor')
+    parser.add_argument('-a', '--auto-select', action='store_true',
+                        help='auto-select which features to use based on importance')
     parser.add_argument('-o', '--output', type=str, default='model.pkl',
                         help='filename to save the model to')
     parser.add_argument('--overwrite', action='store_true',

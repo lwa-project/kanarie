@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 
 import os
+import math
 import time
 import numpy as np
 import argparse
 from urllib import request
 from datetime import datetime
 
+from kanarie.utils import temp_F_to_C, press_inHg_kPa, air_enthalpy
 from kanarie.model import observations_to_features, ShelterTemperatureModel
 
 
@@ -43,7 +45,7 @@ def main(args):
     shl_temp = np.stack([shl_temp0,shl_temp1], axis=1)
     
     # Download the current weather conditions
-    wx_ts, wx_temp, wx_humid, wx_sp, wx_dr = [], [], [], [], []
+    wx_ts, wx_temp, wx_press, wx_humid, wx_enth, wx_sp, wx_dr = [], [], [], [], [], [], []
     with request.urlopen(f"https://lwalab.phys.unm.edu/OpScreen/{args.station}/weather.dat",
                          timeout=30) as uh:
         data = uh.read()
@@ -61,6 +63,12 @@ def main(args):
                 wx_humid.append(float(h))
                 wx_humid.append(float(h))
                 wx_humid.append(float(h))
+            elif line.find('Pressure') != -1:
+                p, _ = fields.split[-1].split('in', 1)
+                _, p = p.split('>', 1)
+                wx_press.append(float(p))
+                wx_press.append(float(p))
+                wx_press.append(float(p))
             elif line.find('Wind<') != -1:
                 _, sp = fields[-5].split('>', 1)
                 dr, _ = fields[-1].split('<', 1)
@@ -74,9 +82,17 @@ def main(args):
                 wx_ts.append(time.time() -   0)     # This updates every 10 min
                 wx_ts.append(time.time() - 600)
                 wx_ts.append(time.time() - 900)
+    for tm,pr,rh in zip(wx_temp, wx_press, wx_humid):
+        tc = temp_F_to_C(tm)
+        pr = press_inHg_kPa(pr)
+        pr *= ((293 - 0.0065*2000) / 293.0)**5.26 # ~Uncorrect for the station altitude
+        en = air_enthalpy(tc, pr, rh)
+        wx_enth.append(en)
     wx_ts = np.array(wx_ts)
     wx_temp = np.array(wx_temp)
+    wx_press = np.array(wx_press)
     wx_humid = np.array(wx_humid)
+    wx_enth = np.array(wx_enth)
     wx_sp = np.array(wx_sp)
     wx_dr = np.array(wx_dr)
     
@@ -88,7 +104,7 @@ def main(args):
     features, values, tstamps = [], [], []
     for stp in (-3, -2, -1):
         features.append(observations_to_features(shl_ts[:stp], shl_temp[:stp],
-                                                 wx_ts, wx_temp, wx_humid, wx_sp, wx_dr))
+                                                 wx_ts, wx_temp, wx_press, wx_humid, wx_enth, wx_sp, wx_dr))
         values.append(shl_temp[stp])
         tstamps.append(shl_ts[stp])
         

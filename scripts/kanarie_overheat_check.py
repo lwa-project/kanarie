@@ -24,7 +24,7 @@ def main(args):
     # Load in the weather data
     weather_data = glob.glob(os.path.join(args.weather_dir, 'wview_backup_*'))
     weather_data.sort()
-    wx_ts, wx_temp, wx_rh, wx_sp, wx_dr = read_wview(weather_data)
+    wx_ts, wx_temp, wx_press, wx_rh, wx_en, wx_sp, wx_dr = read_wview(weather_data)
     
     # Load in the model
     mdl = ShelterTemperatureModel(args.model)
@@ -44,7 +44,7 @@ def main(args):
         w = np.s_[i-180:i]
         try:
             features = observations_to_features(shl_ts[w], shl_temp[w],
-                                                wx_ts, wx_temp, wx_rh, wx_sp, wx_dr)
+                                                wx_ts, wx_temp, wx_press, wx_rh, wx_en, wx_sp, wx_dr)
             p = mdl.predict(features)
             diff.append(shl_temp[i] - p)
             
