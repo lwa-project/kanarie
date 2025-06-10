@@ -48,10 +48,12 @@ def read_shelter(filenames: Union[str,List[str]]) -> Tuple[np.ndarray,np.ndarray
 def read_wview(filenames: Union[str,List[str]]) -> Tuple[np.ndarray,np.ndarray,np.ndarray,np.ndarray,np.ndarray]:
     """
     Given filename or list of filenames pointing to SHL wview weather data 
-    backups, load the data and return a five-element tuple of:
+    backups, load the data and return a seven-element tuple of:
      * unix timestamps
      * outside temperature in F
+     * atomospheric pressure in in of Hg
      * relative humidity
+     * enthaply in kJ/kg
      * Wind speed in mph
      * Wind direction in degrees
     """
@@ -60,7 +62,7 @@ def read_wview(filenames: Union[str,List[str]]) -> Tuple[np.ndarray,np.ndarray,n
         filenames = [filenames,]
     filenames.sort()
     
-    timestamps, temp, humidity, windsp, winddr = [], [], [], [], []
+    timestamps, temp, pressure, humidity, enthalpy, windsp, winddr = [], [], [], [], [], [], []
     for filename in filenames:
         opener = open
         omode = 'r'
@@ -81,29 +83,39 @@ def read_wview(filenames: Union[str,List[str]]) -> Tuple[np.ndarray,np.ndarray,n
                 try:
                     ts = values[fields.index('dateTime')]
                     tm = values[fields.index('outTemp')]
+                    pr = values[fields.index('pressure')]
                     hm = values[fields.index('outHumidity')]
                     wd = values[fields.index('windSpeed')]
                     dr = values[fields.index('windDir')]
                     if dr == 'NULL':
                         dr = '0'
                         
-                    ts, tm, hm, wd, dr = float(ts), float(tm), float(hm), float(wd), float(dr)
+                    ts, tm, pr, hm, wd, dr = float(ts), float(tm), float(pr), float(hm), float(wd), float(dr)
                     
                     timestamps.append(ts)
                     temp.append(tm)
+                    pressure.append(pr)
                     humidity.append(hm)
                     windsp.append(wd)
                     winddr.append(dr)
+                    
+                    # Compute the enthalpy of the air
+                    tc = temp_F_to_C(tm)
+                    pr = press_inHg_kPa(pr)
+                    en = air_enthalpy(tc, pr, hm)
+                    enthalpy.append(en)
                 except (IndexError, ValueError) as e:
                     pass
                     
     timestamps = np.array(timestamps)
     temp = np.array(temp)
+    pressure = np.array(pressure)
     humidity = np.array(humidity)
+    enthalpy = np.array(enthalpy)
     windsp = np.array(windsp)
     winddr = np.array(winddr)
     
-    return timestamps, temp, humidity, windsp, winddr
+    return timestamps, temp, pressure, humidity, enthalpy, windsp, winddr
 
 
 def get_closest_point(ts: float, timestamps: np.ndarray, *args: np.ndarray) -> List[Any]:
@@ -134,3 +146,36 @@ def get_closest_window(ts: float, timestamps: np.ndarray, *args: np.ndarray,
     if len(args) == 1:
         results = results[0]
     return results
+
+
+def temp_F_to_C(temp):
+    """
+    Convert a temperature from F to C.
+    """
+    
+    return (temp - 32) * 5/9.
+
+
+def press_inHg_kPa(press):
+    """
+    Convert a pressue from in of Hg to kPa.
+    """
+    
+    return press * 3.38639
+
+
+def air_enthalpy(temp_C, press_kPa, rh_percent):
+    """
+    Given the temperature in C, the atmospheric pressure in kPa, and the
+    relative humidity as a percentage (0-100%), estimate and return the
+    enthalpy of the air in kJ/kg.
+    """
+    
+    # Saturation vapor pressure of water (kPa)
+    sat_press = 0.6108 * np.exp(17.27*temp_C / (temp_C + 237.3))
+    # Actual vapor pressure of water (kPa)
+    wv_press = (rh_percent / 100.) * sat_press
+    # Specific humidity (kg/kg)
+    sh = 0.622 * wv_press / (press_kPa - wv_press)
+    # Enthalpy (kJ/kg)
+    return 1.006*temp_C + sh*(1.86*temp_C + 2501)
