@@ -25,6 +25,20 @@ def dir_to_ang(dr: str) -> float:
     return conv.index(dr)*22.5
 
 
+def format_temps(values, units=''):
+    """
+    Helper function to help make printing temperatures/differences cleaner.
+    """
+    
+    if units != '':
+        units = ' '+units
+        
+    try:
+        return ', '.join([f"{v:.1f}{units}" for v in values])
+    except:
+        return f"{values:.1f}{units}"
+
+
 def main(args):
     # Download the current list of shelter temperatures
     shl_ts, shl_temp0, shl_temp1 = [], [], []
@@ -124,17 +138,20 @@ def main(args):
     if nhigh >= 3:
         print(f"NOTICE: {args.station} might be in danger of overheating")
         for ts,temp,p in zip(tstamps, values, predicted):
-            print(f"  {ts:.1f} -> {temp} vs {p} predicted")
+            sigs = np.abs(temp - p) / mdl.validation_std
+            print(f"  {ts:.1f} -> {format_temps(temp, 'C')} vs {format_temps(p, 'C')} predicted")
+            print(f"                  ({format_temps(sigs, 'sigma')})")
     else:
         print(f"Shelter temperatures appear normal (nhigh={nhigh})")
         if args.verbose:
             print("Details:")
             for t,v,p in zip(tstamps, values, predicted):
+                sigs = np.abs(v - p) / mdl.validation_std
                 print(f"  Timestamp: {t:.0f} s")
-                print(f"    Actual: {' C, '.join(['%.1f' % v2 for v2 in v])} C")
-                print(f"    Predicted: {' C, '.join(['%.1f' % p2 for p2 in p])} C")
-                print(f"    Difference: {' C, '.join(['%.1f' % (v2-p2) for v2,p2 in zip(v,p)])} C")
-                print(f"                {' sigma, '.join(['%.1f' % ((v2-p2)/mdl.validation_std) for v2,p2 in zip(v,p)])} sigma")
+                print(f"    Actual: {format_temps(v, 'C')}")
+                print(f"    Predicted: {format_temps(p, 'C')}")
+                print(f"    Difference: {format_temps(v-p, 'C')}")
+                print(f"                {format_temps(sigs, 'sigma')}")
 
 
 if __name__ == '__main__':
