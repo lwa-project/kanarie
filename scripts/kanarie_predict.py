@@ -64,8 +64,7 @@ def main(args):
                 wx_humid.append(float(h))
                 wx_humid.append(float(h))
             elif line.find('Pressure') != -1:
-                p, _ = fields.split[-1].split('in', 1)
-                _, p = p.split('>', 1)
+                _, p = fields[-2].split('>', 1)
                 wx_press.append(float(p))
                 wx_press.append(float(p))
                 wx_press.append(float(p))
@@ -122,7 +121,7 @@ def main(args):
                 nhigh += 1
             if temp[1] > p[1] + threshold:
                 nhigh += 1
-    if nhigh > 3:
+    if nhigh >= 3:
         print(f"NOTICE: {args.station} might be in danger of overheating")
         for ts,temp,p in zip(tstamps, values, predicted):
             print(f"  {ts:.1f} -> {temp} vs {p} predicted")
