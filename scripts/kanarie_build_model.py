@@ -124,7 +124,7 @@ if __name__ == '__main__':
                         help='directory containing the shelter and weather data to fit')
     parser.add_argument('-s', '--show-errors', action='store_true',
                         help='do not show feature extraction errors')
-    parser.add_argument('--temp-select', type=str, default='0',
+    parser.add_argument('--temp-select', type=str, default='both',
                         help='build the model using the specified temperature sensor')
     parser.add_argument('-a', '--auto-select', action='store_true',
                         help='auto-select which features to use based on importance')
