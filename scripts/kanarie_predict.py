@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import json
 import math
 import time
 import numpy as np
@@ -135,19 +136,35 @@ def main(args):
                 nhigh += 1
             if temp[1] > p[1] + threshold:
                 nhigh += 1
+                
+    # Gather everything together
+    json_data = {'station': args.station,
+                 'model_uncertainty_C': mdl.validation_std,
+                 'nsensor': 2,
+                 'timestamps': [datetime.utcfromtimestamp(ts).isoformat() for ts in tstamps],
+                 'observed_temperatures_C': [v.tolist() for v in values],
+                 'predicted_temperatures_C': [p.tolist() for p in values],
+                 'diff_temperatures_C': [(v-p).tolist() for v,p in zip(values, predicted)],
+                 'diff_temperatures_sigma': [((v-p)/mdl.validation_std).tolist() for v,p in zip(values, predicted)],
+                 'nhigh': nhigh,
+                 'status': ''}
+    
+    # Make a judgement
+    json_data['status'] = f"Shelter temperatures appear normal (nhigh={nhigh})"
     if nhigh >= 3:
-        print(f"NOTICE: {args.station} might be in danger of overheating")
-        for ts,temp,p in zip(tstamps, values, predicted):
-            sigs = np.abs(temp - p) / mdl.validation_std
-            print(f"  {ts:.1f} -> {format_temps(temp, 'C')} vs {format_temps(p, 'C')} predicted")
-            print(f"                  ({format_temps(sigs, 'sigma')})")
+        json_data['status'] = f"NOTICE: {args.station} might be in danger of overheating"
+        args.verbose = True
+        
+    # Report
+    if args.json:
+        print(json.dumps(json_data))
     else:
-        print(f"Shelter temperatures appear normal (nhigh={nhigh})")
+        print(json_data['status'])
         if args.verbose:
             print("Details:")
             for t,v,p in zip(tstamps, values, predicted):
                 sigs = np.abs(v - p) / mdl.validation_std
-                print(f"  Timestamp: {t:.0f} s")
+                print(f"  Timestamp: {t:.0f} s ({datetime.utcfromtimestamp(t).strftime('%Y-%m-%d %H:%M:%S')} UTC)")
                 print(f"    Actual: {format_temps(v, 'C')}")
                 print(f"    Predicted: {format_temps(p, 'C')}")
                 print(f"    Difference: {format_temps(v-p, 'C')}")
@@ -163,6 +180,8 @@ if __name__ == '__main__':
                         help='station to check')
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='be verbose about the predictions')
+    parser.add_argument('--json', action='store_true',
+                        help='return the output as JSON')
     args = parser.parse_args()
     args.station = args.station.lower().replace('-', '')
     main(args)
