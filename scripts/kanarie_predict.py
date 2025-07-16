@@ -140,6 +140,7 @@ def main(args):
     # Gather everything together
     json_data = {'station': args.station,
                  'model_uncertainty_C': mdl.validation_std,
+                 'high_threshold_sigma': threshold/mdl.validation_std,
                  'nsensor': 2,
                  'timestamps': [datetime.utcfromtimestamp(ts).isoformat() for ts in tstamps],
                  'observed_temperatures_C': [v.tolist() for v in values],
