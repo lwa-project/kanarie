@@ -51,18 +51,20 @@ def main(args):
     
     # Load model
     mdl = ShelterTemperatureModel(args.model)
-    print(f"HVAC Efficiency Analysis - {os.path.basename(args.model)}")
-    print(f"  Model validation std dev: {mdl.validation_std:.3f} C")
-    print(f"  3-sigma threshold: {3*mdl.validation_std:.3f} C")
-    print('')
-    
+    if not args.json:
+        print(f"HVAC Efficiency Analysis - {os.path.basename(args.model)}")
+        print(f"  Model validation std dev: {mdl.validation_std:.3f} C")
+        print(f"  3-sigma threshold: {3*mdl.validation_std:.3f} C")
+        print('')
+        
     # Extract residuals
     t0 = time.time()
     values, predicted, residuals, tstamps, otemps = [], [], [], [], []
     get_names = True
-    print("Extracting residuals...")
+    if not args.json:
+        print("Extracting residuals...")
     for i in range(180, shl_ts.size, 30):
-        if i % 1000 == 0:
+        if i % 1000 == 0 and not args.json:
             print(f"  Working on data window {i} of {shl_ts.size} ({i/shl_ts.size:.1%} complete)")
             
         w = np.s_[i-180:i]
@@ -82,20 +84,23 @@ def main(args):
             
             otemps.append(features[otemp_idx])
         except Exception as e:
-            print(str(e))
+            if not args.json:
+                print(str(e))
     tstamps = np.array(tstamps)
     residuals = np.array(residuals)
     abs_residuals = np.abs(residuals)
     sig_residuals = residuals / mdl.validation_std
     otemps = np.array(otemps)
     t1 = time.time()
-    print(f"Finished residuals extraction in {t1-t0:.1f} s")
-    print(f"  Entries: {tstamps.size}")
-    print('')
-    
+    if not args.json:
+        print(f"Finished residuals extraction in {t1-t0:.1f} s")
+        print(f"  Entries: {tstamps.size}")
+        print('')
+        
     # Gather everything together
     t0 = time.time()
-    print("Analysis...")
+    if not args.json:
+        print("Analyzing...")
     json_data = {'model': os.path.basename(args.model),
                  'model_uncertainty_C': mdl.validation_std,
                  'nanalyzed': tstamps.size,
@@ -143,9 +148,10 @@ def main(args):
             json_data['time_trends']['<-2_sigma'].append(low)
             
     t1 = time.time()
-    print(f"Finished analysis in {t1-t0:.1f} s")
-    print('')
-    
+    if not args.json:
+        print(f"Finished analysis in {t1-t0:.1f} s")
+        print('')
+        
     if args.json:
         print(json.dumps(json_data))
     else:
